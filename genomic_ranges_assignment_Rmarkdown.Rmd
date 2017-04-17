@@ -1,0 +1,72 @@
+---
+title: "Genomic_Ranges_Assignment"
+output: html_document
+---
+Setting up the files
+
+```{r}
+setwd("C:/Users/Devin/Documents/GradSchool/IowaState/EEOB_546X/Genomic_Ranges_Assignment")
+getwd()
+source("http://bioconductor.org/biocLite.R")
+biocLite()
+biocLite("GenomicRanges")
+library(BiocInstaller)
+biocLite("GenomicFeatures")
+library(IRanges)
+library(GenomicRanges)
+biocLite("rtracklayer")
+library(rtracklayer)
+```
+
+Import transcript database of Mmusculus and chromosome 1
+```{r}
+#mm_gtf<-import('C:/Users/Devin/Desktop/bds-files/chapter-09-working-with-range-data/Mus_musculus.GRCm38.75_chr1.gtf.gz')
+biocLite("TxDb.Mmusculus.UCSC.mm10.ensGene")
+library(TxDb.Mmusculus.UCSC.mm10.ensGene)
+txdb <- TxDb.Mmusculus.UCSC.mm10.ensGene
+mm_gtf <- import('Mus_musculus.GRCm38.75_chr1.gtf.gz')
+colnames(mcols(mm_gtf)) #lists all of the column names in mm_gtf
+set.seed(0)
+pseudogene_i <- which(mm_gtf$gene_biotype == "pseudogene" &
+        mm_gtf$type == "gene")
+pseudogene_sample <- sample(pseudogene_i, 5)
+export(mm_gtf[pseudogene_sample], con="five_random_pseudogene.gtf",
+      format="GTF")
+```
+Collapse the transcript db exons into non-overlapping ranges. Then find the exons from chromosome 1.
+```{r}
+collapsed_exons <- reduce(exons(txdb), ignore.strand=TRUE) #will reduce all of the various exons in txdb into non-overlapping ranges, save this as "collapsed_exons"
+chr1_collapsed_exons <- collapsed_exons[seqnames(collapsed_exons) == "chr1"] # of collapsed_exons from txdb, find where the exons are from "chr1"
+chr1_collapsed_exons
+```
+
+Import variant data from chromosome 1 and inspect it. 
+```{r}
+dbsnp137 <- import("mm10_snp137_chr1_trunc.bed.gz") #imports a file of variants from chromosome 1
+summary(width(dbsnp137))
+```
+Adjust width to 1 in case the width is zero
+```{r}
+dbsnp137_resized <- dbsnp137
+zw_i <- width(dbsnp137_resized) == 0 #boolean, finds out if the width of the variant is 0
+dbsnp137_resized[zw_i] <- resize(dbsnp137_resized[zw_i], width=1) #resizes the width of the variants found by zw_i to 1
+```
+Find overlaps from resized variants with chromosome 1 exons and the proportion of those hits between the variants and chromosome 1 that are in an exon region.
+```{r}
+hits <- findOverlaps(dbsnp137_resized, chr1_collapsed_exons, 
+        ignore.strand=TRUE) #chr1_collapsed_exons is the reduced non-overlapping ranges from chromosome 1
+
+hits #there are 57624 hits!
+length(dbsnp137_resized) #270000 variants in dbsnp137
+
+length(unique(queryHits(hits))) #57623 hits are unique!
+length(unique(queryHits(hits)))/length(dbsnp137_resized) #proportion of hits that are in chromosome 1 exons
+```
+Alternatively, finding the number of variants per exon can be done using the countOverlaps() function rather than using findOverlaps().Append the chr1_collapsed_exons with its number of variants per exon, column named "num_vars"
+```{r}
+ var_counts <- countOverlaps(chr1_collapsed_exons, dbsnp137_resized, ignore.strand=TRUE) #counts the number of overlaps/hits between the query and the sunject, the number is how many times the query hits
+var_counts
+chr1_collapsed_exons$num_vars <- var_counts #appends the chr1_collapsed_exons num_variants column with var_counts (number of variants in exons)
+write.csv(chr1_collapsed_exons, "chr1_collapsed_exons.csv", row.names = FALSE)
+```
+
