@@ -2,8 +2,7 @@
 title: "Genomic_Ranges_Assignment"
 output: html_document
 ---
-Setting up the files
-
+Setting up the files and importing key libraries
 ```{r}
 setwd("C:/Users/Devin/Documents/GradSchool/IowaState/EEOB_546X/Genomic_Ranges_Assignment")
 getwd()
@@ -18,7 +17,7 @@ biocLite("rtracklayer")
 library(rtracklayer)
 ```
 
-Import transcript database of Mmusculus and chromosome 1
+Import transcript database of Mus musculus and chromosome 1. Sample psuedogene subtype as well and export as a GTF file.
 ```{r}
 #mm_gtf<-import('C:/Users/Devin/Desktop/bds-files/chapter-09-working-with-range-data/Mus_musculus.GRCm38.75_chr1.gtf.gz')
 biocLite("TxDb.Mmusculus.UCSC.mm10.ensGene")
@@ -65,8 +64,59 @@ length(unique(queryHits(hits)))/length(dbsnp137_resized) #proportion of hits tha
 Alternatively, finding the number of variants per exon can be done using the countOverlaps() function rather than using findOverlaps().Append the chr1_collapsed_exons with its number of variants per exon, column named "num_vars"
 ```{r}
  var_counts <- countOverlaps(chr1_collapsed_exons, dbsnp137_resized, ignore.strand=TRUE) #counts the number of overlaps/hits between the query and the sunject, the number is how many times the query hits
-var_counts
+#var_counts
 chr1_collapsed_exons$num_vars <- var_counts #appends the chr1_collapsed_exons num_variants column with var_counts (number of variants in exons)
 write.csv(chr1_collapsed_exons, "chr1_collapsed_exons.csv", row.names = FALSE)
 ```
+##Extra Credit
+####Retrieving promoter regions:Flank VS Promoter
+```{r}
+table(mm_gtf$gene_biotype) #look at the mm_gtf subset gene_biotype to determine which type of genes we are interested in
+chr1_pcg<-mm_gtf[mm_gtf$type == "gene" & mm_gtf$gene_biotype =="protein_coding"] #subset genes and pick out exclusively the protein coding genes 
+summary(width(chr1_pcg))
+length(chr1_pcg)
+chr1_pcg_3kb_up<-flank(chr1_pcg,width=3000) #this will grab 3000 bp upstream from each feature to include the promoters
+chr1_pcg_3kb_up
+chr1_pcg_3kb_up2<-promoters(chr1_pcg,upstream=3000,downstream=0) #does the same thing as the code above! promoters() grabs 3000 upstream and 200 bp downstream by default.
+identical(chr1_pcg_3kb_up,chr1_pcg_3kb_up2) #TRUE, the two are identical
+```
+####Retrieving protmoter Sequence:connection GenomicRanges with Sequence Data
+Use the flank ranges to get the sequences of the promoter regions.
+```{r}
+biocLite("BSgenome")
+biocLite("BSgenome.Mmusculus.UCSC.mm10")
+library(BSgenome.Mmusculus.UCSC.mm10) #load the BSgenome.Mmusculus.UCSC.mm10
+mm_gm<-BSgenome.Mmusculus.UCSC.mm10
+organism(mm_gm) #verify the organiam 
+providerVersion(mm_gm) #verify the provider version
+provider(mm_gm) #verify the provider of the Msgenome.Mmusculus.UCSC.mm10
+seqinfo(mm_gm)
+```
+Renaming the chromosome names manually.
+```{r}
+all(seqlevels(chr1_pcg_3kb_up)%in% seqlevels(mm_gm)) #check to see if the sequences we want are within the BSgenome object
+gr<-GRanges(c("chr1","chr2"),IRanges(start=c(3,4),width=10)) #test GRange and manually change the name of a chromosome
+seqlevels(gr)
+seqlevels(gr)<-c("1","2") #change the names from chr1 and chr2 to 1 and 2
+seqlevels(gr)
 
+
+
+```
+Renaming the chromosome names in chr1_pcg_3kb_up to match the chromosome names in Mus_musculus.GRCm38.75_chr.gft.gz. using convenient functions.
+```{r}
+seqlevelsStyle(chr1_pcg_3kb_up) #what style are the sublevels? 
+seqlevelsStyle(mm_gm) #the two styles do not match!
+seqlevelsStyle(chr1_pcg_3kb_up)<-"UCSC"#sets chr1_pcg_3kb_up to UCSC style
+all(seqlevels(chr1_pcg_3kb_up)%in% seqlevels(mm_gm))
+
+```
+Grabbing sequences of promoter regions using GRanges
+```{r}
+chr1_3kb_seqs<-getSeq(mm_gm,chr1_pcg_3kb_up) #takes the sequences of mm_gm within the ranges given by the GRange object chr1_pcg_3kb_up
+chr1_3kb_seqs
+```
+Write the promoter sequences to a FASTA file
+```{r}
+writeXStringSet(chr1_3kb_seqs,file="mm10_chr1_3kb_promoters.fasta")
+```
