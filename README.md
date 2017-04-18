@@ -6,7 +6,7 @@ The outfile is titled chr1\_collapsed\_exons.csv that contains the seqnames, ran
 
 The workflow is documented in genomic\_ranges\_assignment\_Rmarkdown.Rmd.
 
-####Extra Credit assignment:
+###Extra Credit assignment:
 
  The extra credit assignment is a continuation of the genomic\_ranges\_assignment\_Rmarkdown.Rmd. 
 
